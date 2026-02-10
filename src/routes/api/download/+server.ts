@@ -8,6 +8,8 @@ import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators
 import { ensureYtDlp } from '$lib/server/ytdlp';
 
 let baseYtDlp: YtDlp | null = null;
+const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android'];
+const DEFAULT_COOKIES = '';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -30,7 +32,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			baseYtDlp.ffmpegPath = ffmpegPath;
 		}
 
-		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl);
+		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl, { cookies: DEFAULT_COOKIES });
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
 		}
@@ -58,7 +60,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// If the selected format already has audio, just download that stream.
 		if (target.acodec && target.acodec !== 'none') {
-			const buffer = await baseYtDlp.stream(parsedUrl).addArgs('-f', formatId).toBuffer();
+			const buffer = await baseYtDlp
+				.stream(parsedUrl)
+				.addArgs(...EXTRA_ARGS)
+				.addArgs('-f', formatId)
+				.toBuffer();
 			headers['Content-Length'] = String(buffer.length);
 			return new Response(new Uint8Array(buffer), { headers });
 		}
@@ -76,7 +82,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			const merger = new YtDlp({ binaryPath: mergeDeps.binaryPath, ffmpegPath: mergeDeps.ffmpegPath || undefined });
 
 			await merger.execAsync(parsedUrl, {
-				rawArgs: ['-f', `${formatId}+bestaudio/best`, '--merge-output-format', 'mp4', '-o', outPath]
+				cookies: DEFAULT_COOKIES,
+				rawArgs: [...EXTRA_ARGS, '-f', `${formatId}+bestaudio/best`, '--merge-output-format', 'mp4', '-o', outPath]
 			});
 
 			const fileBuffer = await readFile(outPath);

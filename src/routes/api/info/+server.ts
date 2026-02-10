@@ -6,6 +6,8 @@ import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators
 import { ensureYtDlp } from '$lib/server/ytdlp';
 
 let ytdlp: YtDlp | null = null;
+const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android'];
+const DEFAULT_COOKIES = '';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -21,7 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			ytdlp = new YtDlp({ binaryPath, ffmpegPath });
 		}
 
-		const rawInfo = await ytdlp.getInfoAsync(parsedUrl);
+		const rawInfo = await ytdlp.getInfoAsync(parsedUrl, { cookies: DEFAULT_COOKIES });
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
 		}
