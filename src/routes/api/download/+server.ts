@@ -9,12 +9,12 @@ import { ensureYtDlp } from '$lib/server/ytdlp';
 
 let baseYtDlp: YtDlp | null = null;
 const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android'];
-const DEFAULT_COOKIES = '';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const { url, formatId } = await request.json();
+		const { url, formatId, cookies: userCookies } = await request.json();
 		const parsedUrl = urlSchema.parse(url);
+		const cookies = typeof userCookies === 'string' && userCookies.length > 0 ? userCookies : process.env.YT_COOKIES || '';
 
 		if (!isSupportedUrl(parsedUrl)) {
 			return json({ error: 'Only YouTube, Instagram or Facebook links are supported.' }, { status: 400 });
@@ -32,7 +32,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			baseYtDlp.ffmpegPath = ffmpegPath;
 		}
 
-		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl, { cookies: DEFAULT_COOKIES });
+		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl, {
+			cookies: cookies || undefined
+		});
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
 		}
@@ -64,6 +66,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				.stream(parsedUrl)
 				.addArgs(...EXTRA_ARGS)
 				.addArgs('-f', formatId)
+				.addArgs(...(cookies ? ['--cookies', cookies] : []))
 				.toBuffer();
 			headers['Content-Length'] = String(buffer.length);
 			return new Response(new Uint8Array(buffer), { headers });
@@ -82,8 +85,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			const merger = new YtDlp({ binaryPath: mergeDeps.binaryPath, ffmpegPath: mergeDeps.ffmpegPath || undefined });
 
 			await merger.execAsync(parsedUrl, {
-				cookies: DEFAULT_COOKIES,
-				rawArgs: [...EXTRA_ARGS, '-f', `${formatId}+bestaudio/best`, '--merge-output-format', 'mp4', '-o', outPath]
+				cookies: cookies || undefined,
+				rawArgs: [
+					...EXTRA_ARGS,
+					...(cookies ? ['--cookies', cookies] : []),
+					'-f',
+					`${formatId}+bestaudio/best`,
+					'--merge-output-format',
+					'mp4',
+					'-o',
+					outPath
+				]
 			});
 
 			const fileBuffer = await readFile(outPath);

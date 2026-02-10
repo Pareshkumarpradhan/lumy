@@ -7,12 +7,13 @@ import { ensureYtDlp } from '$lib/server/ytdlp';
 
 let ytdlp: YtDlp | null = null;
 const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android'];
-const DEFAULT_COOKIES = '';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json();
 		const parsedUrl = urlSchema.parse(body.url);
+		const userCookies = typeof body.cookies === 'string' ? body.cookies : '';
+		const cookies = userCookies || process.env.YT_COOKIES || '';
 
 		if (!isSupportedUrl(parsedUrl)) {
 			return json({ error: 'Only YouTube, Instagram or Facebook links are supported.' }, { status: 400 });
@@ -23,7 +24,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			ytdlp = new YtDlp({ binaryPath, ffmpegPath });
 		}
 
-		const rawInfo = await ytdlp.getInfoAsync(parsedUrl, { cookies: DEFAULT_COOKIES });
+		const rawInfo = await ytdlp.getInfoAsync(parsedUrl, {
+			cookies: cookies || undefined
+		});
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
 		}
