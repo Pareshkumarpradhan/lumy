@@ -22,9 +22,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: 'Missing formatId.' }, { status: 400 });
 		}
 
+		const { binaryPath, ffmpegPath } = await ensureYtDlp();
 		if (!baseYtDlp) {
-			const { binaryPath, ffmpegPath } = await ensureYtDlp();
 			baseYtDlp = new YtDlp({ binaryPath, ffmpegPath });
+		} else {
+			baseYtDlp.binaryPath = binaryPath;
+			baseYtDlp.ffmpegPath = ffmpegPath;
 		}
 
 		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl);
@@ -61,8 +64,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Otherwise merge best audio with chosen video-only format using ffmpeg.
-		const { ffmpegPath } = await ensureYtDlp();
-		if (!ffmpegPath) {
+		const mergeDeps = await ensureYtDlp();
+		if (!mergeDeps.ffmpegPath) {
 			return json({ error: 'FFmpeg missing in runtime.' }, { status: 500 });
 		}
 
@@ -70,7 +73,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const outPath = path.join(tmpDir, `${Date.now()}-${formatId}.mp4`);
 
 		try {
-			const merger = new YtDlp({ binaryPath: (baseYtDlp as YtDlp).binaryPath, ffmpegPath: ffmpegPath || undefined });
+			const merger = new YtDlp({ binaryPath: mergeDeps.binaryPath, ffmpegPath: mergeDeps.ffmpegPath || undefined });
 
 			await merger.execAsync(parsedUrl, {
 				rawArgs: ['-f', `${formatId}+bestaudio/best`, '--merge-output-format', 'mp4', '-o', outPath]

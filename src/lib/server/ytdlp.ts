@@ -6,7 +6,8 @@ import ffmpegPath from 'ffmpeg-static';
 let cachedBinaryPath: string | null = null;
 let ensurePromise: Promise<string> | null = null;
 
-const YT_DLP_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+const YT_DLP_URL_LINUX = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+const YT_DLP_URL_WIN = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
 
 export async function ensureYtDlp(): Promise<{ binaryPath: string; ffmpegPath: string | undefined }> {
 	if (cachedBinaryPath) return { binaryPath: cachedBinaryPath, ffmpegPath: ffmpegPath || undefined };
@@ -18,7 +19,10 @@ export async function ensureYtDlp(): Promise<{ binaryPath: string; ffmpegPath: s
 	ensurePromise = (async () => {
 		const cacheDir = path.join(os.tmpdir(), 'lumy-cache');
 		await mkdir(cacheDir, { recursive: true });
-		const binaryPath = path.join(cacheDir, 'yt-dlp');
+
+		const isWin = process.platform === 'win32';
+		const binaryPath = path.join(cacheDir, isWin ? 'yt-dlp.exe' : 'yt-dlp');
+		const url = isWin ? YT_DLP_URL_WIN : YT_DLP_URL_LINUX;
 
 		try {
 			const stats = await stat(binaryPath);
@@ -27,16 +31,19 @@ export async function ensureYtDlp(): Promise<{ binaryPath: string; ffmpegPath: s
 				return binaryPath;
 			}
 		} catch {
-			// not found, proceed to download
+			// not found, continue to download
 		}
 
-		const res = await fetch(YT_DLP_URL);
+		const res = await fetch(url);
 		if (!res.ok || !res.body) {
 			throw new Error(`Failed to download yt-dlp binary: ${res.status} ${res.statusText}`);
 		}
+
 		const buffer = Buffer.from(await res.arrayBuffer());
 		await writeFile(binaryPath, buffer);
-		await chmod(binaryPath, 0o755);
+		if (!isWin) {
+			await chmod(binaryPath, 0o755);
+		}
 
 		cachedBinaryPath = binaryPath;
 		return binaryPath;
