@@ -6,8 +6,9 @@ import ffmpegPath from 'ffmpeg-static';
 let cachedBinaryPath: string | null = null;
 let ensurePromise: Promise<string> | null = null;
 
-const YT_DLP_URL_LINUX = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+const YT_DLP_URL_LINUX = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
 const YT_DLP_URL_WIN = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
+const YT_DLP_URL_MAC = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos';
 
 export async function ensureYtDlp(): Promise<{ binaryPath: string; ffmpegPath: string | undefined }> {
 	if (cachedBinaryPath) return { binaryPath: cachedBinaryPath, ffmpegPath: ffmpegPath || undefined };
@@ -21,8 +22,12 @@ export async function ensureYtDlp(): Promise<{ binaryPath: string; ffmpegPath: s
 		await mkdir(cacheDir, { recursive: true });
 
 		const isWin = process.platform === 'win32';
-		const binaryPath = path.join(cacheDir, isWin ? 'yt-dlp.exe' : 'yt-dlp');
-		const url = isWin ? YT_DLP_URL_WIN : YT_DLP_URL_LINUX;
+		const isMac = process.platform === 'darwin';
+		const binaryPath = path.join(
+			cacheDir,
+			isWin ? 'yt-dlp.exe' : isMac ? 'yt-dlp_macos' : 'yt-dlp_linux'
+		);
+		const url = isWin ? YT_DLP_URL_WIN : isMac ? YT_DLP_URL_MAC : YT_DLP_URL_LINUX;
 
 		try {
 			const stats = await stat(binaryPath);
