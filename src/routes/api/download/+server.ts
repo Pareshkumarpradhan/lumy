@@ -1,14 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { YtDlp, type PlaylistInfo, type VideoInfo as YtdlpVideoInfo } from 'ytdlp-nodejs';
-import ffmpegPath from 'ffmpeg-static';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators';
+import { ensureYtDlp } from '$lib/server/ytdlp';
 
-setCacheEnv();
-const baseYtDlp = new YtDlp({ ffmpegPath: ffmpegPath || undefined });
+let baseYtDlp: YtDlp | null = null;
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -21,6 +20,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (!formatId || typeof formatId !== 'string') {
 			return json({ error: 'Missing formatId.' }, { status: 400 });
+		}
+
+		if (!baseYtDlp) {
+			const { binaryPath, ffmpegPath } = await ensureYtDlp();
+			baseYtDlp = new YtDlp({ binaryPath, ffmpegPath });
 		}
 
 		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl);
@@ -57,18 +61,16 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Otherwise merge best audio with chosen video-only format using ffmpeg.
+		const { ffmpegPath } = await ensureYtDlp();
 		if (!ffmpegPath) {
-			return json(
-				{ error: 'FFmpeg missing in runtime. On Netlify ensure ffmpeg-static is bundled (see netlify.toml).' },
-				{ status: 500 }
-			);
+			return json({ error: 'FFmpeg missing in runtime.' }, { status: 500 });
 		}
 
 		const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'lumy-'));
 		const outPath = path.join(tmpDir, `${Date.now()}-${formatId}.mp4`);
 
 		try {
-			const merger = new YtDlp({ ffmpegPath: ffmpegPath || undefined });
+			const merger = new YtDlp({ binaryPath: (baseYtDlp as YtDlp).binaryPath, ffmpegPath: ffmpegPath || undefined });
 
 			await merger.execAsync(parsedUrl, {
 				rawArgs: ['-f', `${formatId}+bestaudio/best`, '--merge-output-format', 'mp4', '-o', outPath]
@@ -101,11 +103,6 @@ function sanitizeFileName(name: string): string {
 	return ascii || 'lumy';
 }
 
-function setCacheEnv() {
-	const cacheDir = '/tmp/lumy-cache';
-	process.env.XDG_CACHE_HOME = cacheDir;
-	process.env.YTDLP_BINARY_DIR = cacheDir;
-}
 
 function isVideoInfo(info: YtdlpVideoInfo | PlaylistInfo): info is YtdlpVideoInfo {
 	return (info as YtdlpVideoInfo)._type === 'video';

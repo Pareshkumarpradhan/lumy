@@ -3,9 +3,9 @@ import { YtDlp, type PlaylistInfo, type VideoInfo as YtdlpVideoInfo } from 'ytdl
 import type { RequestHandler } from './$types';
 import type { FormatOption, VideoInfo } from '$lib/types';
 import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators';
+import { ensureYtDlp } from '$lib/server/ytdlp';
 
-setCacheEnv();
-const ytdlp = new YtDlp();
+let ytdlp: YtDlp | null = null;
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -14,6 +14,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (!isSupportedUrl(parsedUrl)) {
 			return json({ error: 'Only YouTube, Instagram or Facebook links are supported.' }, { status: 400 });
+		}
+
+		if (!ytdlp) {
+			const { binaryPath, ffmpegPath } = await ensureYtDlp();
+			ytdlp = new YtDlp({ binaryPath, ffmpegPath });
 		}
 
 		const rawInfo = await ytdlp.getInfoAsync(parsedUrl);
@@ -80,12 +85,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: message }, { status });
 	}
 };
-
-function setCacheEnv() {
-	const cacheDir = '/tmp/lumy-cache';
-	process.env.XDG_CACHE_HOME = cacheDir;
-	process.env.YTDLP_BINARY_DIR = cacheDir;
-}
 
 function isVideoInfo(info: YtdlpVideoInfo | PlaylistInfo): info is YtdlpVideoInfo {
 	return (info as YtdlpVideoInfo)._type === 'video';
