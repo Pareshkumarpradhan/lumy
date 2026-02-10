@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 import type { FormatOption, VideoInfo } from '$lib/types';
 import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators';
 
+setCacheEnv();
 const ytdlp = new YtDlp();
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -79,6 +80,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: message }, { status });
 	}
 };
+
+function setCacheEnv() {
+	const cacheDir = '/tmp/lumy-cache';
+	process.env.XDG_CACHE_HOME = cacheDir;
+	process.env.YTDLP_BINARY_DIR = cacheDir;
+}
 
 function isVideoInfo(info: YtdlpVideoInfo | PlaylistInfo): info is YtdlpVideoInfo {
 	return (info as YtdlpVideoInfo)._type === 'video';

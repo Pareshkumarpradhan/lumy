@@ -7,6 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators';
 
+setCacheEnv();
 const baseYtDlp = new YtDlp({ ffmpegPath: ffmpegPath || undefined });
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -98,6 +99,12 @@ function sanitizeFileName(name: string): string {
 		.trim()
 		.slice(0, 80);
 	return ascii || 'lumy';
+}
+
+function setCacheEnv() {
+	const cacheDir = '/tmp/lumy-cache';
+	process.env.XDG_CACHE_HOME = cacheDir;
+	process.env.YTDLP_BINARY_DIR = cacheDir;
 }
 
 function isVideoInfo(info: YtdlpVideoInfo | PlaylistInfo): info is YtdlpVideoInfo {
