@@ -58,7 +58,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Otherwise merge best audio with chosen video-only format using ffmpeg.
 		if (!ffmpegPath) {
 			return json(
-				{ error: 'FFmpeg missing. Installable via ffmpeg-static dependency; please reinstall dependencies.' },
+				{ error: 'FFmpeg missing in runtime. On Netlify ensure ffmpeg-static is bundled (see netlify.toml).' },
 				{ status: 500 }
 			);
 		}
