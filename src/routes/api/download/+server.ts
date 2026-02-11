@@ -9,7 +9,7 @@ import { ensureYtDlp } from '$lib/server/ytdlp';
 import { resolveYtAuth } from '$lib/server/ytAuth';
 
 let baseYtDlp: YtDlp | null = null;
-const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android,web'];
+const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android,web,tv'];
 
 export const POST: RequestHandler = async ({ request }) => {
 	let cleanupAuth: (() => Promise<void>) | null = null;
@@ -38,10 +38,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			baseYtDlp.ffmpegPath = ffmpegPath;
 		}
 
-		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl, {
-			cookies: auth.cookies,
-			cookiesFromBrowser: auth.cookiesFromBrowser
-		});
+		const rawInfo = await getVideoInfo(baseYtDlp, parsedUrl, auth.cookies, auth.cookiesFromBrowser, auth.rawArgs);
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
 		}
@@ -140,4 +137,21 @@ function sanitizeFileName(name: string): string {
 
 function isVideoInfo(info: YtdlpVideoInfo | PlaylistInfo): info is YtdlpVideoInfo {
 	return (info as YtdlpVideoInfo)._type === 'video';
+}
+
+async function getVideoInfo(
+	client: YtDlp,
+	url: string,
+	cookies: string | undefined,
+	cookiesFromBrowser: string | undefined,
+	authArgs: string[]
+): Promise<YtdlpVideoInfo | PlaylistInfo> {
+	const result = await client.execAsync(url, {
+		dumpSingleJson: true,
+		flatPlaylist: true,
+		cookies,
+		cookiesFromBrowser,
+		rawArgs: [...EXTRA_ARGS, ...authArgs]
+	});
+	return JSON.parse(result.output) as YtdlpVideoInfo | PlaylistInfo;
 }
