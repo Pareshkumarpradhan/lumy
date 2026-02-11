@@ -22,6 +22,7 @@ YouTube may block anonymous requests with "Sign in to confirm you're not a bot".
 
 - `YT_COOKIES_FILE` - absolute path to a Netscape-format cookies file
 - `YT_COOKIES` - Netscape-format cookies file content (multiline)
+- `YT_COOKIES_B64` - base64 of full Netscape cookies content (single-line; easiest for free hosts)
 - `YT_COOKIES_FROM_BROWSER` - browser spec for `--cookies-from-browser` (for environments where a logged-in browser profile exists)
 
 Priority order is: request body values -> environment variables. For API requests, both `/api/info` and `/api/download` now accept:

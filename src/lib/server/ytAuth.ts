@@ -22,7 +22,9 @@ export async function resolveYtAuth(input: YtAuthInput): Promise<YtAuth> {
 	const cleanupDirs: string[] = [];
 	const browser = normalize(input.cookiesFromBrowser || process.env.YT_COOKIES_FROM_BROWSER || '');
 	const directCookieFile = normalize(process.env.YT_COOKIES_FILE || '');
-	const inlineOrPath = normalize(input.cookies || process.env.YT_COOKIES || '');
+	const base64Cookies = normalize(process.env.YT_COOKIES_B64 || '');
+	const decodedBase64Cookies = decodeBase64Cookies(base64Cookies);
+	const inlineOrPath = normalize(input.cookies || process.env.YT_COOKIES || decodedBase64Cookies || '');
 
 	let cookiesFile = '';
 	if (inlineOrPath) {
@@ -63,6 +65,7 @@ async function resolveCookiesPath(value: string, cleanupFiles: string[], cleanup
 	}
 
 	if (looksLikeCookieContent(value)) {
+		ensureHasCookieRows(value);
 		const dir = await mkdtemp(path.join(os.tmpdir(), 'lumy-cookies-'));
 		const cookiePath = path.join(dir, 'cookies.txt');
 		await writeFile(cookiePath, ensureCookieHeader(value), 'utf8');
@@ -72,7 +75,7 @@ async function resolveCookiesPath(value: string, cleanupFiles: string[], cleanup
 	}
 
 	throw new Error(
-		'Cookie configuration is invalid. Provide a valid cookies file path (YT_COOKIES_FILE) or Netscape cookie file content (YT_COOKIES).'
+		'Cookie configuration is invalid. Provide YT_COOKIES_FILE, YT_COOKIES, or YT_COOKIES_B64 with Netscape cookie rows.'
 	);
 }
 
@@ -86,6 +89,28 @@ function ensureCookieHeader(content: string): string {
 		return `${NETSCAPE_COOKIE_HEADER}\n${trimmed}\n`;
 	}
 	return `${trimmed}\n`;
+}
+
+function ensureHasCookieRows(content: string): void {
+	const lines = content
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean);
+	const dataRows = lines.filter((line) => !line.startsWith('#'));
+	if (dataRows.length === 0) {
+		throw new Error(
+			'Cookie file has only header comments and no cookie rows. Re-export youtube.com cookies and paste full content.'
+		);
+	}
+}
+
+function decodeBase64Cookies(value: string): string {
+	if (!value) return '';
+	try {
+		return Buffer.from(value, 'base64').toString('utf8').trim();
+	} catch {
+		throw new Error('Invalid YT_COOKIES_B64 value. Provide valid base64-encoded Netscape cookies content.');
+	}
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
