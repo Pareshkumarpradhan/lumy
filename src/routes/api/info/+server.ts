@@ -4,16 +4,17 @@ import type { RequestHandler } from './$types';
 import type { FormatOption, VideoInfo } from '$lib/types';
 import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators';
 import { ensureYtDlp } from '$lib/server/ytdlp';
+import { resolveYtAuth } from '$lib/server/ytAuth';
 
 let ytdlp: YtDlp | null = null;
-const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android'];
 
 export const POST: RequestHandler = async ({ request }) => {
+	let cleanupAuth: (() => Promise<void>) | null = null;
 	try {
 		const body = await request.json();
 		const parsedUrl = urlSchema.parse(body.url);
 		const userCookies = typeof body.cookies === 'string' ? body.cookies : '';
-		const cookies = userCookies || process.env.YT_COOKIES || '';
+		const userCookiesFromBrowser = typeof body.cookiesFromBrowser === 'string' ? body.cookiesFromBrowser : '';
 
 		if (!isSupportedUrl(parsedUrl)) {
 			return json({ error: 'Only YouTube, Instagram or Facebook links are supported.' }, { status: 400 });
@@ -24,8 +25,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			ytdlp = new YtDlp({ binaryPath, ffmpegPath });
 		}
 
+		const auth = await resolveYtAuth({ cookies: userCookies, cookiesFromBrowser: userCookiesFromBrowser });
+		cleanupAuth = auth.cleanup;
 		const rawInfo = await ytdlp.getInfoAsync(parsedUrl, {
-			cookies: cookies || undefined
+			cookies: auth.cookies,
+			cookiesFromBrowser: auth.cookiesFromBrowser
 		});
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
@@ -88,6 +92,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		const message = error instanceof Error ? error.message : 'Failed to extract video information.';
 		const status = message.includes('Unsupported URL') || message.includes('Invalid URL') ? 400 : 502;
 		return json({ error: message }, { status });
+	} finally {
+		if (cleanupAuth) {
+			await cleanupAuth();
+		}
 	}
 };
 

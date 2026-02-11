@@ -6,15 +6,21 @@ import path from 'node:path';
 import os from 'node:os';
 import { detectPlatform, isSupportedUrl, urlSchema } from '$lib/utils/validators';
 import { ensureYtDlp } from '$lib/server/ytdlp';
+import { resolveYtAuth } from '$lib/server/ytAuth';
 
 let baseYtDlp: YtDlp | null = null;
-const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android'];
+const EXTRA_ARGS = ['--extractor-args', 'youtube:player_client=android,web'];
 
 export const POST: RequestHandler = async ({ request }) => {
+	let cleanupAuth: (() => Promise<void>) | null = null;
 	try {
-		const { url, formatId, cookies: userCookies } = await request.json();
+		const { url, formatId, cookies: userCookies, cookiesFromBrowser: userCookiesFromBrowser } = await request.json();
 		const parsedUrl = urlSchema.parse(url);
-		const cookies = typeof userCookies === 'string' && userCookies.length > 0 ? userCookies : process.env.YT_COOKIES || '';
+		const auth = await resolveYtAuth({
+			cookies: typeof userCookies === 'string' ? userCookies : '',
+			cookiesFromBrowser: typeof userCookiesFromBrowser === 'string' ? userCookiesFromBrowser : ''
+		});
+		cleanupAuth = auth.cleanup;
 
 		if (!isSupportedUrl(parsedUrl)) {
 			return json({ error: 'Only YouTube, Instagram or Facebook links are supported.' }, { status: 400 });
@@ -33,7 +39,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		const rawInfo = await baseYtDlp.getInfoAsync(parsedUrl, {
-			cookies: cookies || undefined
+			cookies: auth.cookies,
+			cookiesFromBrowser: auth.cookiesFromBrowser
 		});
 		if (!isVideoInfo(rawInfo)) {
 			return json({ error: 'Playlists are not supported. Please use a single video URL.' }, { status: 400 });
@@ -66,7 +73,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				.stream(parsedUrl)
 				.addArgs(...EXTRA_ARGS)
 				.addArgs('-f', formatId)
-				.addArgs(...(cookies ? ['--cookies', cookies] : []))
+				.addArgs(...auth.rawArgs)
 				.toBuffer();
 			headers['Content-Length'] = String(buffer.length);
 			return new Response(new Uint8Array(buffer), { headers });
@@ -85,10 +92,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			const merger = new YtDlp({ binaryPath: mergeDeps.binaryPath, ffmpegPath: mergeDeps.ffmpegPath || undefined });
 
 			await merger.execAsync(parsedUrl, {
-				cookies: cookies || undefined,
+				cookies: auth.cookies,
+				cookiesFromBrowser: auth.cookiesFromBrowser,
 				rawArgs: [
 					...EXTRA_ARGS,
-					...(cookies ? ['--cookies', cookies] : []),
+					...auth.rawArgs,
 					'-f',
 					`${formatId}+bestaudio/best`,
 					'--merge-output-format',
@@ -111,6 +119,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Download failed.';
 		return json({ error: message }, { status: 502 });
+	} finally {
+		if (cleanupAuth) {
+			await cleanupAuth();
+		}
 	}
 };
 

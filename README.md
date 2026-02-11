@@ -17,6 +17,18 @@ npm run dev -- --open
 ### First run
 The first call to `/api/info` or `/api/download` triggers `ytdlp-nodejs` to download the correct `yt-dlp` binary into the project cache. No extra setup is required.
 
+### Production auth for YouTube
+YouTube may block anonymous requests with "Sign in to confirm you're not a bot". Configure one of these:
+
+- `YT_COOKIES_FILE` - absolute path to a Netscape-format cookies file
+- `YT_COOKIES` - Netscape-format cookies file content (multiline)
+- `YT_COOKIES_FROM_BROWSER` - browser spec for `--cookies-from-browser` (for environments where a logged-in browser profile exists)
+
+Priority order is: request body values -> environment variables. For API requests, both `/api/info` and `/api/download` now accept:
+
+- `cookies` - cookie file path or Netscape cookie file content
+- `cookiesFromBrowser` - value for `--cookies-from-browser`
+
 ## Available scripts
 - `npm run dev` – start dev server
 - `npm run build` – production build
