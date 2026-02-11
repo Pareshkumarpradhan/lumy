@@ -2,6 +2,7 @@ import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 const NETSCAPE_COOKIE_HEADER = '# Netscape HTTP Cookie File';
 
@@ -22,9 +23,13 @@ export async function resolveYtAuth(input: YtAuthInput): Promise<YtAuth> {
 	const cleanupDirs: string[] = [];
 	const browser = normalize(input.cookiesFromBrowser || process.env.YT_COOKIES_FROM_BROWSER || '');
 	const directCookieFile = normalize(process.env.YT_COOKIES_FILE || '');
+	const gzipBase64Cookies = normalize(process.env.YT_COOKIES_B64_GZIP || '');
+	const decodedGzipBase64Cookies = decodeGzipBase64Cookies(gzipBase64Cookies);
 	const base64Cookies = normalize(process.env.YT_COOKIES_B64 || '');
 	const decodedBase64Cookies = decodeBase64Cookies(base64Cookies);
-	const inlineOrPath = normalize(input.cookies || process.env.YT_COOKIES || decodedBase64Cookies || '');
+	const inlineOrPath = normalize(
+		input.cookies || process.env.YT_COOKIES || decodedGzipBase64Cookies || decodedBase64Cookies || ''
+	);
 
 	let cookiesFile = '';
 	if (inlineOrPath) {
@@ -110,6 +115,18 @@ function decodeBase64Cookies(value: string): string {
 		return Buffer.from(value, 'base64').toString('utf8').trim();
 	} catch {
 		throw new Error('Invalid YT_COOKIES_B64 value. Provide valid base64-encoded Netscape cookies content.');
+	}
+}
+
+function decodeGzipBase64Cookies(value: string): string {
+	if (!value) return '';
+	try {
+		const gz = Buffer.from(value, 'base64');
+		return gunzipSync(gz).toString('utf8').trim();
+	} catch {
+		throw new Error(
+			'Invalid YT_COOKIES_B64_GZIP value. Provide valid gzip+base64 Netscape cookies content.'
+		);
 	}
 }
 
